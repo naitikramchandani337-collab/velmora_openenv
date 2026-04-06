@@ -1,0 +1,47 @@
+name: velmora-incident-env
+description: Real-world incident response simulation environment for evaluating AI agents on troubleshooting, decision-making, and escalation tasks.
+
+version: 1.0
+
+entrypoint:
+  type: http
+  url: http://localhost:7860
+
+api:
+  reset: /reset
+  step: /step
+  state: /state
+
+tasks:
+  - name: easy
+    description: Simple, low-impact incidents with clear solutions
+  - name: medium
+    description: Moderately complex incidents requiring investigation
+  - name: hard
+    description: High-impact incidents requiring multi-step reasoning
+
+actions:
+  - investigate
+  - fix
+  - monitor
+  - escalate
+  - contain
+
+observation:
+  type: object
+  fields:
+    incident: string
+    hint: string
+    resources: integer
+    steps_taken:
+      type: array
+      items: string
+    logs: string
+    user_impact: string
+    system_status: string
+
+reward:
+  type: object
+  fields:
+    score: float
+    feedback: string
