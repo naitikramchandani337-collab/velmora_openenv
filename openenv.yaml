@@ -1,0 +1,73 @@
+name: velmora-incident-env
+version: "1.0.0"
+description: Real-world incident response simulation environment for evaluating AI agents on troubleshooting, escalation, containment, and recovery workflows.
+author: khushi
+license: MIT
+
+tasks:
+  - id: easy
+    name: Easy
+    description: Simple low-impact incidents with clear solutions
+    difficulty: easy
+
+  - id: medium
+    name: Medium
+    description: Moderately complex incidents requiring investigation and escalation
+    difficulty: medium
+
+  - id: hard
+    name: Hard
+    description: High-impact incidents requiring containment, escalation, and strategic recovery
+    difficulty: hard
+
+action_space:
+  type: object
+  properties:
+    action:
+      type: string
+      enum:
+        - investigate
+        - fix
+        - monitor
+        - escalate
+        - contain
+
+observation_space:
+  type: object
+  properties:
+    incident:
+      type: string
+    hint:
+      type: string
+    logs:
+      type: string
+    user_impact:
+      type: string
+    system_status:
+      type: string
+    steps_taken:
+      type: array
+      items:
+        type: string
+    resources:
+      type: integer
+    severity:
+      type: string
+    current_stage:
+      type: string
+
+reward_space:
+  type: object
+  properties:
+    score:
+      type: number
+    feedback:
+      type: string
+    progress:
+      type: number
+    penalty:
+      type: number
+
+reward_range:
+  min: 0.0
+  max: 1.0
