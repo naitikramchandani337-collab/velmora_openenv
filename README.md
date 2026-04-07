@@ -21,13 +21,7 @@ It provides a structured benchmark for training and evaluating autonomous agents
 The environment includes three difficulty levels:
 
 ### Easy
-Low-severity issues such as UI bugs and minor failures with clear solutions.
-
-### Medium
-System-level issues such as API latency, service instability, and intermittent failures requiring multi-step reasoning.
-
-### Hard
-High-severity incidents including security breaches, distributed system failures, and traffic anomalies requiring strategic decision-making.
+S
 
 ---
 
