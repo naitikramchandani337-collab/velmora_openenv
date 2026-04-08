@@ -3,7 +3,7 @@ name = "velmora-incident-env"
 version = "0.1.0"
 description = "OpenEnv environment for incident response simulation"
 authors = [
-    {name = "Your Name"}
+    {name = "Khushi Ramchandani"}
 ]
 dependencies = [
     "fastapi",
@@ -17,7 +17,7 @@ dependencies = [
 server = "server.app:main"
 
 [tool.setuptools]
-packages = ["env", "baseline", "server"]
+packages = ["velmora_env", "baseline", "server"]
 
 [build-system]
 requires = ["setuptools", "wheel"]

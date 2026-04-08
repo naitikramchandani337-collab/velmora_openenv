@@ -1,21 +1,21 @@
 import os
-from openai import OpenAI
+import numpy as np
+from huggingface_hub import InferenceClient
 from velmora_env.environment import IncidentEnv
 from velmora_env.models import Action
 from velmora_env.grader import grade_task
 
-API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
-MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-72B-Instruct")
+MODEL_NAME = os.getenv("MODEL_NAME", "meta-llama/Llama-3.3-70B-Instruct")
 HF_TOKEN = os.getenv("HF_TOKEN")
 
 if not HF_TOKEN:
     raise RuntimeError("Missing HF_TOKEN")
 
-client = OpenAI(api_key=HF_TOKEN, base_url=API_BASE_URL)
+client = InferenceClient(provider="groq", api_key=HF_TOKEN)
 
-VALID_ACTIONS = ["investigate", "fix", "monitor", "escalate", "contain"]
-MAX_STEPS = 50
-BENCHMARK = "velmora-incident"
+VALID_ACTIONS = os.getenv("VALID_ACTIONS", "investigate,fix,monitor,escalate,contain").split(",")
+MAX_STEPS = int(os.getenv("MAX_STEPS", "50"))
+BENCHMARK = os.getenv("BENCHMARK", "velmora-incident")
 
 
 def log_start(task):
@@ -24,18 +24,12 @@ def log_start(task):
 
 def log_step(step, action_text, reward, done, error=None):
     err = error if error else "null"
-    print(
-        f"[STEP] step={step} action={action_text} reward={reward:.2f} done={str(done).lower()} error={err}",
-        flush=True
-    )
+    print(f"[STEP] step={step} action={action_text} reward={reward:.2f} done={str(done).lower()} error={err}", flush=True)
 
 
 def log_end(success, steps, score, rewards_list):
     rewards_str = ",".join(f"{r:.2f}" for r in rewards_list)
-    print(
-        f"[END] success={str(success).lower()} steps={steps} score={score:.2f} rewards={rewards_str}",
-        flush=True
-    )
+    print(f"[END] success={str(success).lower()} steps={steps} score={score:.2f} rewards={rewards_str}", flush=True)
 
 
 def choose_action(obs):
@@ -55,8 +49,6 @@ def choose_action(obs):
             return "contain"
         if "fix" not in taken:
             return "fix"
-        if "monitor" not in taken:
-            return "monitor"
         return "monitor"
 
     if severity == "medium":
@@ -66,22 +58,17 @@ def choose_action(obs):
             return "escalate"
         if "fix" not in taken:
             return "fix"
-        if "monitor" not in taken:
-            return "monitor"
         return "monitor"
 
     if severity == "low":
         if ("typo" in incident or "broken" in incident or "link" in incident or "placeholder" in incident or "template" in incident or "search" in incident or "password" in incident):
             if "fix" not in taken:
                 return "fix"
-            if "monitor" not in taken:
-                return "monitor"
+            return "monitor"
         if "investigate" not in taken:
             return "investigate"
         if "fix" not in taken:
             return "fix"
-        if "monitor" not in taken:
-            return "monitor"
         return "monitor"
 
     return "investigate"
@@ -93,7 +80,7 @@ def run_task(task_name):
 
     done = False
     step_count = 0
-    rewards_list = []
+    rewards_list = np.array([], dtype=np.float32)
 
     log_start(task_name)
 
@@ -103,14 +90,14 @@ def run_task(task_name):
 
         obs, reward, done, info = env.step(action)
         step_count += 1
-        rewards_list.append(reward.score)
+        rewards_list = np.append(rewards_list, reward.score)
 
         log_step(step_count, action_text, reward.score, done)
 
     final_score = grade_task(env, task_name)
     success = final_score > 0.5
 
-    log_end(success, step_count, final_score, rewards_list)
+    log_end(success, step_count, final_score, rewards_list.tolist())
     return final_score
 
 

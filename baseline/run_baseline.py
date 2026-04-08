@@ -1,49 +1,69 @@
+import os
 from velmora_env.environment import IncidentEnv
+
+CLASSIFIER = os.getenv("BASELINE_CLASSIFIER", "groq").lower()  # "groq" or "xgb"
+
+VALID_ACTIONS = ["investigate", "fix", "monitor", "escalate", "contain"]
+
+
+def choose_action_groq(observation):
+    from openai import OpenAI
+    client = OpenAI(
+        base_url="https://api.groq.com/openai/v1",
+        api_key=os.getenv("GROQ_API_KEY", os.getenv("HF_TOKEN")),
+    )
+    model = os.getenv("MODEL_NAME", "llama-3.3-70b-versatile")
+
+    prompt = (
+        f"You are an expert incident response agent. Your job is to pick the single best next action.\n\n"
+        f"Available actions: {VALID_ACTIONS}\n"
+        f"Rules:\n"
+        f"- For LOW severity: if the cause is obvious (typo, broken link, visual issue), go straight to 'fix' then 'monitor'. If the cause is unclear (asset loading, CDN, config), start with 'investigate' first.\n"
+        f"- For MEDIUM severity: always start with 'investigate'. Only use 'escalate' if logs mention external/third-party/vendor/gateway issues. Then 'fix', then 'monitor'.\n"
+        f"- For HIGH severity: start with 'contain' for security/breach/data issues, then 'investigate', then 'escalate', then 'fix', then 'monitor'\n"
+        f"- Never repeat an action already taken. Never add extra actions beyond what is needed.\n\n"
+        f"Incident: {observation.incident}\n"
+        f"Severity: {observation.severity}\n"
+        f"Hint: {observation.hint}\n"
+        f"Logs: {observation.logs}\n"
+        f"Steps already taken: {observation.steps_taken}\n\n"
+        f"Respond with exactly one word from the available actions list. No explanation."
+    )
+
+    response = client.chat.completions.create(
+        model=model,
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=10,
+        temperature=0.0,
+    )
+
+    action = response.choices[0].message.content.strip().lower()
+    return action if action in VALID_ACTIONS else "investigate"
+
+
+def choose_action_xgb(observation):
+    import numpy as np
+    from xgboost import XGBClassifier
+    import joblib
+
+    model_path = os.getenv("XGB_MODEL_PATH", "baseline/xgb_model.pkl")
+    clf = joblib.load(model_path)
+
+    keywords = VALID_ACTIONS + ["breach", "payment", "latency", "typo", "image", "access", "slow", "media"]
+    text = f"{observation.incident} {observation.hint} {observation.severity}".lower()
+    features = np.array([[1 if kw in text else 0 for kw in keywords]], dtype=np.float32)
+
+    label = clf.predict(features)[0]
+    return VALID_ACTIONS[int(label)] if int(label) < len(VALID_ACTIONS) else "investigate"
 
 
 def choose_action(observation):
-    """
-    Simple rule-based agent:
-    Uses hint keywords to decide next action
-    """
-
-    hint = observation.hint.lower()
-
-    if "typo" in hint or "visible" in hint:
-        return "fix"
-
-    if "image" in hint or "media" in hint:
-        if "investigate" not in observation.steps_taken:
-            return "investigate"
-        return "fix"
-
-    if "latency" in hint or "slow" in hint:
-        if "investigate" not in observation.steps_taken:
-            return "investigate"
-        if "fix" not in observation.steps_taken:
-            return "fix"
-        return "monitor"
-
-    if "payment" in hint:
-        if "investigate" not in observation.steps_taken:
-            return "investigate"
-        if "escalate" not in observation.steps_taken:
-            return "escalate"
-        return "fix"
-
-    if "breach" in hint or "access" in hint:
-        if "contain" not in observation.steps_taken:
-            return "contain"
-        if "investigate" not in observation.steps_taken:
-            return "investigate"
-        if "escalate" not in observation.steps_taken:
-            return "escalate"
-        return "monitor"
-
-    return "investigate"
+    if CLASSIFIER == "xgb":
+        return choose_action_xgb(observation)
+    return choose_action_groq(observation)
 
 
-def run_task(task_name):
+def run_task(task_name, debug=False):
     env = IncidentEnv(task_name=task_name)
     obs = env.reset()
 
@@ -53,21 +73,18 @@ def run_task(task_name):
 
     while not done:
         action_text = choose_action(obs)
-
+        if debug:
+            print(f"  incident={obs.incident!r} severity={obs.severity} taken={obs.steps_taken} -> {action_text}")
         action = type("Action", (), {"action": action_text})()
-
         obs, reward, done, _ = env.step(action)
-
         total_score += reward.score
         steps += 1
 
-    # ✅ NORMALIZED FINAL SCORE (IMPORTANT FIX)
     final_score = total_score / steps if steps > 0 else 0.0
-
     return round(final_score, 3)
 
 
 if __name__ == "__main__":
-    print("easy", run_task("easy"))
-    print("medium", run_task("medium"))
-    print("hard", run_task("hard"))
+    for task in ["easy", "medium", "hard"]:
+        score = run_task(task, debug=True)
+        print(task, score)

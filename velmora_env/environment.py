@@ -162,8 +162,20 @@ class IncidentEnv:
             )
 
         severity = current["severity"]
-        user_impact = "Low" if severity == "low" else "Moderate" if severity == "medium" else "Severe"
-        system_status = "stable" if severity == "low" else "degraded" if severity == "medium" else "critical"
+
+        user_impact_map = {
+            "low": "Minimal user impact, isolated to a small surface area",
+            "medium": "Moderate user impact, some workflows are degraded",
+            "high": "Severe user impact, critical functionality is unavailable"
+        }
+        system_status_map = {
+            "low": "System is stable with a minor cosmetic or config issue",
+            "medium": "System is degraded, performance or reliability is affected",
+            "high": "System is in a critical state, immediate action required"
+        }
+
+        user_impact = user_impact_map.get(severity, "Unknown")
+        system_status = system_status_map.get(severity, "unknown")
 
         return Observation(
             incident=current["incident"],
@@ -200,6 +212,9 @@ class IncidentEnv:
         progress = correct_prefix_len / len(ideal)
         efficiency = self.state_data["resources"] / 5.0
 
+        # advance incident if all ideal actions have been taken (order-independent completion)
+        ideal_done = all(a in taken for a in ideal)
+
         penalty = 0.0
 
         if not correct_action:
@@ -211,7 +226,7 @@ class IncidentEnv:
         if action.action == "investigate" and "investigate" in taken[:-1]:
             penalty += 0.20
 
-        if action.action == "fix" and "investigate" not in taken[:-1]:
+        if action.action == "fix" and "investigate" not in taken[:-1] and "investigate" in ideal:
             penalty += 0.20
 
         if current["requires_containment"] and "contain" not in taken and current["severity"] == "high":
@@ -254,9 +269,9 @@ class IncidentEnv:
 
         done = False
 
-        if progress >= 1.0 or self.state_data["resources"] <= 0:
+        if progress >= 1.0 or ideal_done or self.state_data["resources"] <= 0:
             self.current_index += 1
-            self.incidents_completed += 1 if progress >= 1.0 else 0
+            self.incidents_completed += 1 if (progress >= 1.0 or ideal_done) else 0
 
             if self.current_index >= len(self.tasks[self.task_name]):
                 done = True
