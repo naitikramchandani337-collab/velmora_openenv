@@ -67,12 +67,15 @@ def health():
 
 
 @app.post("/reset")
-def reset(body: ResetRequest):
+def reset(task: str = "easy", body: ResetRequest = None):
     global env_instance
+    task_name = body.task if body else task
+    if task_name not in VALID_TASKS:
+        raise HTTPException(status_code=422, detail=f"task must be one of {sorted(VALID_TASKS)}")
     try:
-        env_instance = IncidentEnv(task_name=body.task)
+        env_instance = IncidentEnv(task_name=task_name)
         obs = env_instance.reset()
-        return {"task": body.task, "observation": obs.dict(), "state": env_instance.state().dict()}
+        return {"task": task_name, "observation": obs.dict(), "state": env_instance.state().dict()}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -137,7 +140,7 @@ def grader(task: str = "easy"):
 
 
 def main():
-    uvicorn.run("server.app:app", host="0.0.0.0", port=8000)
+    uvicorn.run("server.app:app", host="0.0.0.0", port=7860)
 
 
 if __name__ == "__main__":
