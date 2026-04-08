@@ -1,17 +1,15 @@
 import os
 import numpy as np
-from huggingface_hub import InferenceClient
+from openai import OpenAI
 from velmora_env.environment import IncidentEnv
 from velmora_env.models import Action
 from velmora_env.grader import grade_task
 
+API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
 MODEL_NAME = os.getenv("MODEL_NAME", "meta-llama/Llama-3.3-70B-Instruct")
 HF_TOKEN = os.getenv("HF_TOKEN")
 
-if not HF_TOKEN:
-    raise RuntimeError("Missing HF_TOKEN")
-
-client = InferenceClient(provider="groq", api_key=HF_TOKEN)
+client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
 
 VALID_ACTIONS = os.getenv("VALID_ACTIONS", "investigate,fix,monitor,escalate,contain").split(",")
 MAX_STEPS = int(os.getenv("MAX_STEPS", "50"))
@@ -29,7 +27,7 @@ def log_step(step, action_text, reward, done, error=None):
 
 def log_end(success, steps, score, rewards_list):
     rewards_str = ",".join(f"{r:.2f}" for r in rewards_list)
-    print(f"[END] success={str(success).lower()} steps={steps} score={score:.2f} rewards={rewards_str}", flush=True)
+    print(f"[END] success={str(success).lower()} steps={steps} score={score:.3f} rewards={rewards_str}", flush=True)
 
 
 def choose_action(obs):
@@ -81,23 +79,29 @@ def run_task(task_name):
     done = False
     step_count = 0
     rewards_list = np.array([], dtype=np.float32)
+    final_score = 0.0
+    success = False
 
     log_start(task_name)
 
-    while not done and step_count < MAX_STEPS:
-        action_text = choose_action(obs)
-        action = Action(action=action_text)
+    try:
+        while not done and step_count < MAX_STEPS:
+            action_text = choose_action(obs)
+            action = Action(action=action_text)
 
-        obs, reward, done, info = env.step(action)
-        step_count += 1
-        rewards_list = np.append(rewards_list, reward.score)
+            obs, reward, done, info = env.step(action)
+            step_count += 1
+            rewards_list = np.append(rewards_list, reward.score)
 
-        log_step(step_count, action_text, reward.score, done)
+            log_step(step_count, action_text, reward.score, done)
 
-    final_score = grade_task(env, task_name)
-    success = final_score > 0.5
+        final_score = grade_task(env, task_name)
+        success = final_score > 0.5
+    except Exception as e:
+        log_step(step_count + 1, "error", 0.0, True, error=str(e))
+    finally:
+        log_end(success, step_count, final_score, rewards_list.tolist())
 
-    log_end(success, step_count, final_score, rewards_list.tolist())
     return final_score
 
 
