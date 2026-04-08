@@ -1,4 +1,5 @@
 ---
+<<<<<<< HEAD
 title: Velmora Incident Response OpenEnv
 emoji: 🚨
 colorFrom: red
@@ -128,3 +129,16 @@ export API_BASE_URL="https://api.groq.com/openai/v1"
 export MODEL_NAME="llama-3.1-8b-instant"
 export HF_TOKEN="your_token_here"
 python inference.py
+=======
+title: Velmora Openenv
+emoji: 🐠
+colorFrom: red
+colorTo: yellow
+sdk: docker
+pinned: false
+license: mit
+short_description: An AI-powered environment that solves tasks across difficult
+---
+
+Check out the configuration reference at https://huggingface.co/docs/hub/spaces-config-reference
+>>>>>>> 07b2751a385a8c4b5692c3834acc70713f984cd5
