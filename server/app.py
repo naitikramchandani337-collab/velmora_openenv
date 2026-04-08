@@ -36,16 +36,6 @@ class ResetRequest(BaseModel):
         return v
 
 
-class GraderRequest(BaseModel):
-    task: str = "easy"
-
-    @field_validator("task")
-    @classmethod
-    def validate_task(cls, v):
-        if v not in VALID_TASKS:
-            raise ValueError(f"task must be one of {sorted(VALID_TASKS)}")
-        return v
-
 
 class StepRequest(BaseModel):
     action: str
@@ -123,16 +113,18 @@ def tasks():
 
 
 @app.get("/grader")
-def grader(body: GraderRequest):
+def grader(task: str = "easy"):
+    if task not in VALID_TASKS:
+        raise HTTPException(status_code=422, detail=f"task must be one of {sorted(VALID_TASKS)}")
     global env_instance
     if env_instance is None:
         raise HTTPException(status_code=400, detail="Call /reset first")
     try:
-        score = grade_task(env_instance, body.task)
+        score = grade_task(env_instance, task)
         s = env_instance.state()
-        total_incidents = len(env_instance.tasks[body.task]) if body.task in env_instance.tasks else 0
+        total_incidents = len(env_instance.tasks[task]) if task in env_instance.tasks else 0
         return {
-            "task": body.task,
+            "task": task,
             "score": score,
             "incidents_completed": env_instance.incidents_completed,
             "total_incidents": total_incidents,
