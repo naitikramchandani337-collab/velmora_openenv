@@ -58,10 +58,22 @@ def format_observation(obs) -> str:
 
 def parse_action(raw_text: str) -> str:
     text = raw_text.strip().lower()
+    # exact word match first
+    for action in VALID_ACTIONS:
+        if text == action:
+            return action
+    # fallback: substring match
     for action in VALID_ACTIONS:
         if action in text:
             return action
     return "investigate"
+
+
+def format_feedback(reward, obs) -> str:
+    return (
+        f"Result: reward={reward.score:.2f}, feedback='{reward.feedback}', "
+        f"progress={reward.progress:.2f}, stage={obs.current_stage}"
+    )
 
 
 def run_single_task(task: str, client: OpenAI, model_name: str) -> Dict[str, Any]:
@@ -102,6 +114,10 @@ def run_single_task(task: str, client: OpenAI, model_name: str) -> Dict[str, Any
             obs, reward, done, info = env.step(action)
             step_idx += 1
             rewards_list = np.append(rewards_list, reward.score)
+
+            # feed reward feedback back so model improves next step
+            if not done:
+                messages.append({"role": "user", "content": format_feedback(reward, obs)})
 
             emit("[STEP]", {
                 "step": step_idx,
