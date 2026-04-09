@@ -6,10 +6,10 @@ authors = [
     {name = "Khushi Ramchandani"}
 ]
 dependencies = [
-    "fastapi==0.115.0",
-    "uvicorn==0.30.6",
-    "pydantic==2.9.2",
-    "openai==1.50.2",
+    "fastapi>=0.100.0",
+    "uvicorn>=0.20.0",
+    "pydantic>=2.0.0",
+    "openai>=1.0.0",
 ]
 
 [project.scripts]
