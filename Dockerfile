@@ -1,19 +1,21 @@
-FROM python:3.10-slim
-
-RUN useradd -m -u 1000 user
-USER user
-ENV PATH="/home/user/.local/bin:$PATH"
+FROM python:3.11-slim
 
 WORKDIR /app
 
-COPY --chown=user requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
 
-COPY --chown=user . .
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY velmora_env/ ./velmora_env/
+COPY server/ ./server/
+COPY inference.py .
+COPY app.py .
+COPY openenv.yaml .
+COPY pyproject.toml .
 
 RUN pip install --no-cache-dir -e .
 
 EXPOSE 7860
 
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "7860"]
+CMD ["uvicorn", "server.app:app", "--host", "0.0.0.0", "--port", "7860"]
