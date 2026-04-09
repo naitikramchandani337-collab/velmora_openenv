@@ -8,9 +8,14 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, field_validator
 
-from velmora_env.environment import IncidentEnv
-from velmora_env.models import Action
-from velmora_env.grader import grade_task
+try:
+    from velmora_env.environment import IncidentEnv
+    from velmora_env.models import Action
+    from velmora_env.grader import grade_task
+    ENV_AVAILABLE = True
+except Exception as e:
+    print(f"[WARN] velmora_env import failed: {e}", flush=True)
+    ENV_AVAILABLE = False
 
 app = FastAPI(title="Velmora Incident Response OpenEnv")
 
@@ -72,6 +77,8 @@ def health():
 
 @app.post("/reset")
 def reset(task: str = "easy", body: ResetRequest = None):
+    if not ENV_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Environment not available")
     task_name = body.task if body else task
     if task_name not in VALID_TASKS:
         raise HTTPException(status_code=422, detail=f"task must be one of {sorted(VALID_TASKS)}")
@@ -92,6 +99,8 @@ def reset(task: str = "easy", body: ResetRequest = None):
 
 @app.post("/step")
 def step(body: StepRequest):
+    if not ENV_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Environment not available")
     env = ENVS.get(body.session_id)
     if env is None:
         raise HTTPException(status_code=400, detail="Invalid session_id. Call /reset first.")
