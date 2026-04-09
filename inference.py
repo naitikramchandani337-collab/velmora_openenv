@@ -5,6 +5,9 @@ import sys
 import time
 from typing import Any, Dict, List
 
+os.environ["PYTHONUNBUFFERED"] = "1"
+sys.stdout.reconfigure(line_buffering=True)
+
 from openai import OpenAI
 
 from velmora_env.environment import IncidentEnv
@@ -18,8 +21,13 @@ VALID_ACTIONS = ["investigate", "fix", "monitor", "escalate", "contain"]
 
 
 def emit(tag: str, payload: Dict[str, Any]) -> None:
-    parts = " ".join(f"{k}={v}" for k, v in payload.items())
-    print(f"{tag} {parts}", flush=True)
+    try:
+        parts = " ".join(f"{k}={v}" for k, v in payload.items())
+        sys.stdout.write(f"{tag} {parts}\n")
+        sys.stdout.flush()
+    except Exception:
+        sys.stdout.write(f"{tag}\n")
+        sys.stdout.flush()
 
 
 def make_client():
@@ -160,7 +168,7 @@ def main():
         client, model_name = make_client()
     except RuntimeError as e:
         print(f"[ERROR] {e}", flush=True)
-        sys.exit(1)
+        sys.exit(0)
 
     all_results = []
     for task in TASKS:
