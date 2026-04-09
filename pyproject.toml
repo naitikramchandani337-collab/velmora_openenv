@@ -16,7 +16,7 @@ dependencies = [
 velmora-server = "server.app:main"
 
 [tool.setuptools]
-packages = ["velmora_env", "baseline", "server"]
+packages = ["velmora_env", "server"]
 
 [build-system]
 requires = ["setuptools", "wheel"]
