@@ -1,18 +1,23 @@
+from __future__ import annotations
+
+import uuid
+from typing import Dict
+
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, field_validator
+
 from velmora_env.environment import IncidentEnv
 from velmora_env.models import Action
 from velmora_env.grader import grade_task
-import uvicorn
 
 app = FastAPI(title="Velmora Incident Response OpenEnv")
 
-env_instance = None
-
 VALID_TASKS = {"easy", "medium", "hard"}
 VALID_ACTIONS = {"investigate", "fix", "monitor", "escalate", "contain"}
+
+ENVS: Dict[str, IncidentEnv] = {}
 
 
 @app.exception_handler(RequestValidationError)
@@ -30,19 +35,19 @@ class ResetRequest(BaseModel):
 
     @field_validator("task")
     @classmethod
-    def validate_task(cls, v):
+    def validate_task(cls, v: str) -> str:
         if v not in VALID_TASKS:
             raise ValueError(f"task must be one of {sorted(VALID_TASKS)}")
         return v
 
 
-
 class StepRequest(BaseModel):
+    session_id: str
     action: str
 
     @field_validator("action")
     @classmethod
-    def validate_action(cls, v):
+    def validate_action(cls, v: str) -> str:
         if v not in VALID_ACTIONS:
             raise ValueError(f"action must be one of {sorted(VALID_ACTIONS)}")
         return v
@@ -54,10 +59,9 @@ def root():
         "name": "Velmora Incident Response OpenEnv",
         "version": "1.0.0",
         "status": "running",
-        "description": "Real-world incident response simulation for evaluating AI agents on operational troubleshooting, escalation, containment, and recovery.",
         "tasks": sorted(VALID_TASKS),
         "actions": sorted(VALID_ACTIONS),
-        "reward_range": [0.0, 1.0]
+        "reward_range": [0.0, 1.0],
     }
 
 
@@ -68,37 +72,49 @@ def health():
 
 @app.post("/reset")
 def reset(task: str = "easy", body: ResetRequest = None):
-    global env_instance
     task_name = body.task if body else task
     if task_name not in VALID_TASKS:
         raise HTTPException(status_code=422, detail=f"task must be one of {sorted(VALID_TASKS)}")
     try:
-        env_instance = IncidentEnv(task_name=task_name)
-        obs = env_instance.reset()
-        return {"task": task_name, "observation": obs.dict(), "state": env_instance.state().dict()}
+        env = IncidentEnv(task_name=task_name)
+        obs = env.reset()
+        session_id = str(uuid.uuid4())
+        ENVS[session_id] = env
+        return {
+            "session_id": session_id,
+            "task": task_name,
+            "observation": obs.dict(),
+            "state": env.state().dict(),
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/step")
 def step(body: StepRequest):
-    global env_instance
-    if env_instance is None:
-        raise HTTPException(status_code=400, detail="Call /reset first")
+    env = ENVS.get(body.session_id)
+    if env is None:
+        raise HTTPException(status_code=400, detail="Invalid session_id. Call /reset first.")
     try:
-        obs, reward, done, info = env_instance.step(Action(action=body.action))
-        return {"observation": obs.dict(), "reward": reward.dict(), "done": done, "info": info, "state": env_instance.state().dict()}
+        obs, reward, done, info = env.step(Action(action=body.action))
+        return {
+            "observation": obs.dict(),
+            "reward": reward.dict(),
+            "done": done,
+            "info": info,
+            "state": env.state().dict(),
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/state")
-def state():
-    global env_instance
-    if env_instance is None:
-        raise HTTPException(status_code=400, detail="Call /reset first")
+def state(session_id: str):
+    env = ENVS.get(session_id)
+    if env is None:
+        raise HTTPException(status_code=400, detail="Invalid session_id. Call /reset first.")
     try:
-        return env_instance.state().dict()
+        return env.state().dict()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -109,37 +125,38 @@ def tasks():
         "tasks": [
             {"id": "easy", "description": "Simple low-impact incidents"},
             {"id": "medium", "description": "Moderately complex incidents"},
-            {"id": "hard", "description": "High-severity incidents requiring strategic handling"}
+            {"id": "hard", "description": "High-severity incidents requiring strategic handling"},
         ],
-        "actions": sorted(VALID_ACTIONS)
+        "actions": sorted(VALID_ACTIONS),
     }
 
 
 @app.get("/grader")
-def grader(task: str = "easy"):
+def grader(session_id: str, task: str = "easy"):
     if task not in VALID_TASKS:
         raise HTTPException(status_code=422, detail=f"task must be one of {sorted(VALID_TASKS)}")
-    global env_instance
-    if env_instance is None:
-        raise HTTPException(status_code=400, detail="Call /reset first")
+    env = ENVS.get(session_id)
+    if env is None:
+        raise HTTPException(status_code=400, detail="Invalid session_id. Call /reset first.")
     try:
-        score = grade_task(env_instance, task)
-        s = env_instance.state()
-        total_incidents = len(env_instance.tasks[task]) if task in env_instance.tasks else 0
+        score = grade_task(env, task)
+        s = env.state()
+        total_incidents = len(env.tasks[task]) if task in env.tasks else 0
         return {
             "task": task,
             "score": score,
-            "incidents_completed": env_instance.incidents_completed,
+            "incidents_completed": env.incidents_completed,
             "total_incidents": total_incidents,
             "resources_remaining": s.resources,
             "done": s.done,
-            "state": s.dict()
+            "state": s.dict(),
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 def main():
+    import uvicorn
     uvicorn.run("server.app:app", host="0.0.0.0", port=7860)
 
 
